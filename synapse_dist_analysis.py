@@ -1,16 +1,104 @@
 import numpy as np
-import sys
+import os
+import math
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 
-def main(input_file):
+def main(input_file, scale_factor=1):
 
     verts, faces = read_obj(input_file)
-    island_1 = find_island(0, verts, faces)
-    print(island_1)
-    island_2 = find_island(8, verts, faces)
-    print(island_2)
+    path, file_name = os.path.split(input_file)
+
+    #This scale factor moves us from the pixel dimension to microns
+    verts = verts * scale_factor
+
+    visited_verts = set()
+    islands = []
+
+    for vert_index, vert in enumerate(verts):
+        if vert_index not in visited_verts:
+            current_island = find_island(vert_index, verts, faces)
+            islands.append(list(current_island))
+            for part in current_island:
+                visited_verts.add(part)
 
 
+    island_centers = []
+
+    for island in islands:
+        x_total = 0.0
+        y_total = 0.0
+        z_total = 0.0
+        count = 0
+        for vert in island:
+            x_total += verts[vert][0]
+            y_total += verts[vert][1]
+            z_total += verts[vert][2]
+            count += 1
+        x_average = x_total / count
+        y_average = y_total / count
+        z_average = z_total / count
+
+        island_centers.append([x_average, y_average, z_average])
+
+    print("Number of separate components: " + str(len(island_centers)))
+
+    shortest_dists = []
+    for island_center_index, island_center_coords in enumerate(island_centers):
+        dist, index = nearest_neighbor(island_center_index, island_centers)
+        shortest_dists.append(dist)
+
+    """
+    Histogram settings here
+    """
+    max_value = 2.5
+    min_value = 0.0
+    bin_width = 0.1
+
+    sns.set_style("darkgrid")
+    plt.figure(figsize=(8,6))
+    ax = sns.distplot(shortest_dists,
+                      bins=int((max_value-min_value)/bin_width),
+                      hist_kws={'range': (min_value, max_value)},
+                      kde=False,
+                      rug=True,
+                      norm_hist=False)
+
+    ax.set(xlabel='Distance (microns)', ylabel="Count", title=file_name)
+    plt.text(1.7, 2.3, "Count: " + str(len(island_centers)), fontsize=12)
+
+    figure = ax.get_figure()
+    output_filename = file_name + "_distributionHist.png"
+    figure.savefig(output_filename, dpi=300)
+
+
+def nearest_neighbor(point_index, points):
+    """
+    return the nearest neighbor index and distance
+    :param point_index: starting point
+    :param points: a 2-d list where each row is a new point and the column correspond to x, y, z, coordinates
+    :return:
+    """
+    nearest_distance = 9999
+    nearest_index = -1
+    x_coord = points[point_index][0]
+    y_coord = points[point_index][1]
+    z_coord = points[point_index][2]
+    for point, coordinates in enumerate(points):
+        if point == point_index:
+            pass
+        else:
+            x_dist = abs(x_coord - coordinates[0])
+            y_dist = abs(y_coord - coordinates[1])
+            z_dist = abs((z_coord - coordinates[2]))
+
+            distance = math.sqrt(x_dist**2 + y_dist**2 + z_dist**2)
+            if distance < nearest_distance:
+                nearest_distance = distance
+                nearest_index = point
+
+    return(nearest_distance, nearest_index)
 
 
 def find_island(vert_index, verts, faces, island=set(), starting_var=True):
@@ -89,10 +177,5 @@ def read_obj(in_file):
     return(verts_array, faces_array)
 
 
-if __name__ == "__main__":
-
-    if len(sys.argv) == 2:
-        main(sys.argv[1])
-    else:
-        print('error')
+main("/home/user1/Synapse_Distribution/test_files/VCN_c30_SinputTerminal04_Synapses_deci.obj", scale_factor=0.011)
 
